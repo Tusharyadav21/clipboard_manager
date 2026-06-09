@@ -4,6 +4,20 @@ A production-grade, high-performance status bar utility for macOS (14.0+) built 
 
 ---
 
+## Installation
+
+The recommended way to install the Clipboard Manager (which automatically bypasses macOS Gatekeeper warnings during installation) is via Homebrew:
+
+```bash
+# Add the custom tap
+brew tap Tusharyadav21/tap
+
+# Install the application
+brew install --cask clipboard-manager
+```
+
+---
+
 ## Key Features & Modernizations
 
 ### 🚀 Performance & Architecture (Swift 6 + GRDB)
