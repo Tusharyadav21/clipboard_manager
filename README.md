@@ -130,5 +130,13 @@ To publish updates and distribute the new DMG via GitHub Releases cleanly using 
 
 ## Troubleshooting & Debugging
 
+- **Gatekeeper Warning ("Apple could not verify...")**: Since local and GitHub-built releases are not signed and notarized with a paid Apple Developer Program account, macOS Gatekeeper will block them by default.
+  - To run the application:
+    1. Drag the application to your `/Applications` directory.
+    2. **Control-click (or right-click)** the app icon and choose **Open**, then click **Open** in the confirmation dialog. (This only needs to be done once).
+    3. Alternatively, you can strip the macOS quarantine flag using terminal:
+       ```bash
+       xattr -cr "/Applications/clipboard manager.app"
+       ```
 - **Accessibility Permissions**: If automated pasting does not work, make sure that the app is enabled under **System Settings > Privacy & Security > Accessibility**. If problems persist, toggle it off and back on.
 - **App Sandboxing**: Because this application simulates global keystrokes to automate pasting into active target programs, Sandboxing must remain disabled (`ENABLE_APP_SANDBOX = NO`).
