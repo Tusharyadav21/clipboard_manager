@@ -7,7 +7,7 @@ struct ClipboardManagerApp: App {
     var body: some Scene {
         Settings {
             SettingsView()
-                .environmentObject(appDelegate.store)
+                .environmentObject(appDelegate.viewModel)
         }
     }
 }

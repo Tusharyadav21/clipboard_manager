@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct PopoverView: View {
-    @EnvironmentObject private var store: ClipboardStore
+    @EnvironmentObject private var viewModel: ClipboardViewModel
     @AppStorage(SettingsKeys.autoPaste) private var autoPaste = true
     @AppStorage(SettingsKeys.glassIntensity) private var glassIntensity = 0.65
     @AppStorage(SettingsKeys.appTheme) private var appTheme = AppTheme.system.rawValue
@@ -37,19 +37,16 @@ struct PopoverView: View {
             }
         }
         .onAppear {
-            showPermissionNotice = autoPaste && !AccessibilityHelper.isTrusted()
-            if showPermissionNotice {
-                AccessibilityHelper.requestIfNeeded()
-            }
+            showPermissionNotice = autoPaste && !PasteService.shared.isTrusted()
             selectFirstIfNeeded()
             isSearchFocused = true
         }
-        .onChange(of: store.searchQuery) { _, _ in
+        .onChange(of: viewModel.searchQuery) { _, _ in
             selectFirstIfNeeded()
         }
-        .sheet(isPresented: $store.showOnboarding) {
+        .sheet(isPresented: $viewModel.showOnboarding) {
             OnboardingView { persist, login in
-                store.completeOnboarding(persistHistory: persist, launchAtLogin: login)
+                viewModel.completeOnboarding(persistHistory: persist, launchAtLogin: login)
             }
         }
         .onExitCommand {
@@ -72,7 +69,7 @@ struct PopoverView: View {
         .padding(6)
         .alert("Clear non-pinned items?", isPresented: $showClearConfirmation) {
             Button("Clear", role: .destructive) {
-                store.clearNonPinned()
+                viewModel.clearNonPinned()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -80,22 +77,20 @@ struct PopoverView: View {
         }
     }
 
-    
-    
     private var content: some View {
         VStack(spacing: 8) {
-            SearchBar(text: $store.searchQuery, isFocused: $isSearchFocused)
+            SearchBar(text: $viewModel.searchQuery, isFocused: $isSearchFocused)
             headerActions
 
-            if store.pinnedItems.isEmpty && store.recentItems.isEmpty {
+            if viewModel.pinnedItems.isEmpty && viewModel.recentItems.isEmpty {
                 emptyState
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 8) {
-                            if !store.pinnedItems.isEmpty {
+                            if !viewModel.pinnedItems.isEmpty {
                                 SectionHeader(title: "Pinned")
-                                ForEach(store.pinnedItems) { item in
+                                ForEach(viewModel.pinnedItems) { item in
                                     ClipboardRow(
                                         item: item,
                                         isSelected: selectedItemID == item.id,
@@ -104,9 +99,9 @@ struct PopoverView: View {
                                     .id(item.id)
                                 }
                             }
-                            if !store.recentItems.isEmpty {
+                            if !viewModel.recentItems.isEmpty {
                                 SectionHeader(title: "Recent")
-                                ForEach(store.recentItems) { item in
+                                ForEach(viewModel.recentItems) { item in
                                     ClipboardRow(
                                         item: item,
                                         isSelected: selectedItemID == item.id,
@@ -130,7 +125,7 @@ struct PopoverView: View {
             }
         }
         .padding(10)
-        .environmentObject(store)
+        .environmentObject(viewModel)
     }
 
     private var headerActions: some View {
@@ -175,7 +170,7 @@ struct PopoverView: View {
     }
 
     private var displayItems: [ClipboardItem] {
-        store.pinnedItems + store.recentItems
+        viewModel.pinnedItems + viewModel.recentItems
     }
 
     private func selectFirstIfNeeded() {
@@ -219,227 +214,5 @@ struct PopoverView: View {
     private func handleSelect(_ item: ClipboardItem) {
         selectedItemID = item.id
         onSelectItem(item)
-    }
-}
-
-struct ClipboardRow: View {
-    @EnvironmentObject private var store: ClipboardStore
-
-    let item: ClipboardItem
-    let isSelected: Bool
-    let onSelectItem: (ClipboardItem) -> Void
-
-    var body: some View {
-        Button(action: handlePaste) {
-            HStack(alignment: .top, spacing: 8) {
-                AppIcon(bundleId: item.sourceAppBundleId)
-                    .frame(width: 20, height: 20)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.text)
-                        .lineLimit(2)
-                        .font(.system(size: 13, weight: .medium))
-                    HStack(spacing: 8) {
-                        Text(item.sourceAppName ?? "Unknown")
-                        Text(".")
-                        Text(item.createdAt, style: .time)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if item.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(8)
-            .background(.ultraThinMaterial.opacity(0.75))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? .blue.opacity(0.75) : .white.opacity(0.18), lineWidth: isSelected ? 1.6 : 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button(item.isPinned ? "Unpin" : "Pin") {
-                store.togglePin(item)
-            }
-            Button("Delete") {
-                store.delete(item)
-            }
-        }
-    }
-
-    private func handlePaste() {
-        onSelectItem(item)
-    }
-}
-
-struct SectionHeader: View {
-    let title: String
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            Spacer()
-        }
-        .padding(.horizontal, 4)
-    }
-}
-
-struct SearchBar: View {
-    @Binding var text: String
-    var isFocused: FocusState<Bool>.Binding
-
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-            TextField("Search clipboard", text: $text)
-                .textFieldStyle(.plain)
-                .focused(isFocused)
-        }
-        .padding(8)
-        .background(.ultraThinMaterial.opacity(0.8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(.white.opacity(0.2), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-}
-
-final class AppIconCache {
-    static let shared = AppIconCache()
-    private let cache = NSCache<NSString, NSImage>()
-
-    private init() {
-        cache.countLimit = 24
-        cache.totalCostLimit = 2 * 1024 * 1024
-    }
-
-    func image(for bundleId: String) -> NSImage? {
-        cache.object(forKey: bundleId as NSString)
-    }
-
-    func set(_ image: NSImage, for bundleId: String) {
-        let thumbnail = thumbnailImage(from: image)
-        cache.setObject(thumbnail, forKey: bundleId as NSString, cost: imageCost(thumbnail))
-    }
-
-    func clear() {
-        cache.removeAllObjects()
-    }
-
-    private func imageCost(_ image: NSImage) -> Int {
-        if let rep = image.representations
-            .compactMap({ $0 as? NSBitmapImageRep })
-            .max(by: { ($0.pixelsWide * $0.pixelsHigh) < ($1.pixelsWide * $1.pixelsHigh) }) {
-            return rep.pixelsWide * rep.pixelsHigh * 4
-        }
-        return 256 * 256 * 4
-    }
-
-    private func thumbnailImage(from image: NSImage) -> NSImage {
-        let targetSize = NSSize(width: 36, height: 36)
-        let thumbnail = NSImage(size: targetSize)
-        thumbnail.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(
-            in: NSRect(origin: .zero, size: targetSize),
-            from: NSRect(origin: .zero, size: image.size),
-            operation: .copy,
-            fraction: 1
-        )
-        thumbnail.unlockFocus()
-        return thumbnail
-    }
-}
-
-struct AppIcon: View {
-    var bundleId: String?
-    @State private var image: NSImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else {
-                Image(systemName: "app")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .task(id: bundleId) {
-            image = resolveIcon(for: bundleId)
-        }
-    }
-
-    private func resolveIcon(for bundleId: String?) -> NSImage? {
-        guard let bundleId else { return nil }
-        if let cached = AppIconCache.shared.image(for: bundleId) {
-            return cached
-        }
-        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
-            return nil
-        }
-        let resolved = NSWorkspace.shared.icon(forFile: appURL.path)
-        AppIconCache.shared.set(resolved, for: bundleId)
-        return resolved
-    }
-}
-
-struct PermissionBanner: View {
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text("Enable Accessibility for direct paste into active app.")
-                .font(.caption)
-            Spacer()
-            Button("Open Settings") {
-                AccessibilityHelper.requestIfNeeded()
-                AccessibilityHelper.openAccessibilitySettings()
-            }
-            Button("Dismiss", action: onDismiss)
-        }
-        .padding(8)
-        .background(.ultraThinMaterial)
-        .clipShape(.rect(cornerRadius: 10))
-    }
-}
-
-struct OnboardingView: View {
-    @State private var persistHistory = true
-    @State private var launchAtLogin = true
-
-    let onComplete: (Bool, Bool) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Welcome to Clipboard Manager")
-                .font(.title2.bold())
-            Text("Choose how you want the app to behave. You can change these later in Settings.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Toggle("Persist clipboard history across restarts", isOn: $persistHistory)
-            Toggle("Launch at login", isOn: $launchAtLogin)
-
-            HStack {
-                Spacer()
-                Button("Continue") {
-                    onComplete(persistHistory, launchAtLogin)
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 420)
     }
 }

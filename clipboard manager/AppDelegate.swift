@@ -3,22 +3,43 @@ import Carbon
 import Dispatch
 import SwiftUI
 
-private let hotkeyDidChangeNotification = Notification.Name("hotkeyDidChange")
 private let defaultHotkeyKeyCode: UInt32 = UInt32(kVK_ANSI_V)
 private let defaultHotkeyModifiers: UInt32 = UInt32(cmdKey) | UInt32(shiftKey)
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    let store = ClipboardStore()
-    private let monitor = ClipboardMonitor()
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    let repository: GRDBClipboardRepository
+    let service: ClipboardService
+    let viewModel: ClipboardViewModel
+    
+    private var monitorTask: Task<Void, Never>?
     private let hotkey = HotkeyManager()
 
     private var statusItem: NSStatusItem?
     private var overlayPanel: NSPanel?
     private var settingsWindow: NSWindow?
     private var eventMonitor: EventMonitor?
-    private var keyMonitor: Any?
+    nonisolated(unsafe) private var keyMonitor: Any?
     private var pasteTargetApp: NSRunningApplication?
     private var memoryPressureSource: DispatchSourceMemoryPressure?
+
+    override init() {
+        do {
+            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = appSupport.appendingPathComponent("ClipboardManager", isDirectory: true)
+            let dbURL = dir.appendingPathComponent("clipboard_history.sqlite")
+            
+            let repo = try GRDBClipboardRepository(databaseURL: dbURL)
+            self.repository = repo
+            
+            let service = ClipboardService(repository: repo)
+            self.service = service
+            
+            self.viewModel = ClipboardViewModel(clipboardService: service)
+        } catch {
+            fatalError("Failed to initialize database: \(error)")
+        }
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ensureHotkeyDefaults()
@@ -28,13 +49,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupClipboardMonitor()
         setupOverlayDismissObservers()
         setupMemoryPressureMonitoring()
-        store.loadOnLaunch()
-        store.presentOnboardingIfNeeded()
+        
+        // Load data and migrate legacy history asynchronously
+        Task {
+            await LegacyJSONImporter.migrateIfNeeded(repository: repository)
+            await MainActor.run {
+                viewModel.loadOnLaunch()
+                viewModel.presentOnboardingIfNeeded()
+            }
+        }
     }
 
     private func setupOverlayPanel() {
         let panel = OverlayPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: Constants.overlayWidth, height: Constants.overlayHeight),
             styleMask: [.nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -63,8 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.showSettingsWindow()
             }
         )
-        .environmentObject(store)
-        .frame(width: 400, height: 460)
+        .environmentObject(viewModel)
+        .frame(width: Constants.overlayWidth, height: Constants.overlayHeight)
 
         panel.contentViewController = NSHostingController(rootView: rootView)
         overlayPanel = panel
@@ -120,16 +148,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleHotkeyChanged),
-            name: hotkeyDidChangeNotification,
+            name: .hotkeyDidChange,
             object: nil
         )
     }
 
     private func setupClipboardMonitor() {
-        monitor.onChange = { [weak self] text, source in
-            self?.store.addClipboardText(text, sourceApp: source)
+        let monitor = ClipboardMonitorService { [weak self] text, bundleId, appName in
+            guard let self else { return }
+            await MainActor.run {
+                self.viewModel.addClipboardText(text, bundleId: bundleId, appName: appName)
+            }
         }
-        monitor.start()
+        self.monitorTask = monitor.start()
     }
 
     private func setupOverlayDismissObservers() {
@@ -154,7 +185,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteTargetApp = NSWorkspace.shared.frontmostApplication
         positionOverlay(panel)
         panel.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     private func closeOverlay() {
@@ -164,35 +199,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showSettingsWindow() {
         if settingsWindow == nil {
-            let rootView = SettingsView().environmentObject(store)
+            let rootView = SettingsView().environmentObject(viewModel)
             let hosting = NSHostingController(rootView: rootView)
             let window = NSWindow(contentViewController: hosting)
             window.title = "Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 520, height: 560))
-            window.isReleasedWhenClosed = false
+            window.setContentSize(NSSize(width: Constants.settingsWidth, height: Constants.settingsHeight))
+            window.isReleasedWhenClosed = true
+            window.delegate = self
             settingsWindow = window
         }
 
         closeOverlay()
-        NSApp.activate()
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         settingsWindow?.center()
         settingsWindow?.orderFrontRegardless()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func handleSelection(item: ClipboardItem) {
-        store.copyItemToPasteboard(item)
+        viewModel.copyItemToPasteboard(item)
         closeOverlay()
+        
         let target = pasteTargetApp
-        target?.activate()
-
-        let directPasteEnabled = UserDefaults.standard.object(forKey: SettingsKeys.autoPaste) as? Bool ?? true
-        guard directPasteEnabled else { return }
-
-        guard AccessibilityHelper.isTrusted() else { return }
-
-        pasteIntoTargetApp(target, attempt: 0)
+        let directPasteEnabled = UserDefaults.standard.bool(forKey: SettingsKeys.autoPaste)
+        
+        if directPasteEnabled {
+            if PasteService.shared.isTrusted() {
+                Task {
+                    await PasteService.shared.paste(item: item, targetApp: target)
+                }
+            } else {
+                showAccessibilityAlert()
+            }
+        } else {
+            // Just activate the target application and copy the text
+            target?.activate(options: [.activateIgnoringOtherApps])
+        }
     }
 
     private func positionOverlay(_ panel: NSPanel) {
@@ -201,11 +248,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let screen = NSScreen.screens.first { $0.visibleFrame.contains(anchor) } ?? NSScreen.main
         let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
 
-        let rawX = anchor.x - 24
-        let rawY = anchor.y - panelSize.height - 10
+        let rawX = anchor.x - Constants.overlayAnchorOffset
+        let rawY = anchor.y - panelSize.height - Constants.overlayBottomOffset
 
-        let x = min(max(rawX, visibleFrame.minX + 8), visibleFrame.maxX - panelSize.width - 8)
-        let y = max(min(rawY, visibleFrame.maxY - panelSize.height - 8), visibleFrame.minY + 8)
+        let x = min(max(rawX, visibleFrame.minX + Constants.overlayPadding), visibleFrame.maxX - panelSize.width - Constants.overlayPadding)
+        let y = max(min(rawY, visibleFrame.maxY - panelSize.height - Constants.overlayPadding), visibleFrame.minY + Constants.overlayPadding)
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
@@ -254,10 +301,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let source = self.memoryPressureSource else { return }
             let events = source.data
             if events.contains(.critical) {
-                self.store.trimMemory(aggressive: true)
+                self.viewModel.trimMemory(aggressive: true)
                 AppIconCache.shared.clear()
             } else if events.contains(.warning) {
-                self.store.trimMemory(aggressive: false)
+                self.viewModel.trimMemory(aggressive: false)
                 AppIconCache.shared.clear()
             }
         }
@@ -265,27 +312,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         memoryPressureSource = source
     }
 
-    private func pasteIntoTargetApp(_ target: NSRunningApplication?, attempt: Int) {
-        let maxAttempts = 8
-        if target == nil {
-            AccessibilityHelper.simulatePaste()
-            return
-        }
+    private func showAccessibilityAlert() {
+        let alert = NSAlert()
+        alert.messageText = "Accessibility Access Required"
+        alert.informativeText = "Direct paste requires Accessibility access. Please enable it in System Preferences."
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
 
-        if attempt > maxAttempts {
-            AccessibilityHelper.simulatePaste()
-            return
-        }
-
-        target?.activate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            let frontmost = NSWorkspace.shared.frontmostApplication
-            let didActivateTarget = frontmost?.processIdentifier == target?.processIdentifier
-            if didActivateTarget {
-                AccessibilityHelper.simulatePaste()
-            } else {
-                self?.pasteIntoTargetApp(target, attempt: attempt + 1)
-            }
+        alert.window.center()
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            PasteService.shared.openAccessibilitySettings()
         }
     }
 
@@ -293,8 +331,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
         }
+        monitorTask?.cancel()
         memoryPressureSource?.cancel()
         NotificationCenter.default.removeObserver(self)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        settingsWindow = nil
     }
 }
 
@@ -303,14 +346,8 @@ final class OverlayPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
-extension Notification.Name {
-    static let overlaySelectNext = Notification.Name("overlaySelectNext")
-    static let overlaySelectPrevious = Notification.Name("overlaySelectPrevious")
-    static let overlayConfirmSelection = Notification.Name("overlayConfirmSelection")
-}
-
 final class EventMonitor {
-    private var monitor: Any?
+    nonisolated(unsafe) private var monitor: Any?
     private let mask: NSEvent.EventTypeMask
     private let handler: (NSEvent) -> Void
 
@@ -331,6 +368,8 @@ final class EventMonitor {
     }
 
     deinit {
-        stop()
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 }

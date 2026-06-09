@@ -65,6 +65,8 @@
 			);
 			name = "clipboard manager";
 			packageProductDependencies = (
+			
+				29D7E6A62F3CEB1D0080059C /* GRDB */,
 			);
 			productName = "clipboard manager";
 			productReference = 29D7E6912F3CEB1C0080059C /* clipboard manager.app */;
@@ -96,6 +98,9 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 29D7E6922F3CEB1C0080059C /* Products */;
+			packageReferences = (
+				29D7E6A52F3CEB1D0080059C /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -103,6 +108,26 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		29D7E6A52F3CEB1D0080059C /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.29.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		29D7E6A62F3CEB1D0080059C /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 29D7E6A52F3CEB1D0080059C /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
+
 
 /* Begin PBXResourcesBuildPhase section */
 		29D7E68F2F3CEB1C0080059C /* Resources */ = {
@@ -251,7 +276,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -269,8 +294,9 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -282,7 +308,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -300,8 +326,9 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};

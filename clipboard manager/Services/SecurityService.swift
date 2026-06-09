@@ -2,12 +2,12 @@ import CryptoKit
 import Foundation
 import Security
 
-enum SecureHistoryCrypto {
+public enum SecurityService: Sendable {
     nonisolated private static let service = "com.clipboardmanager.history"
     nonisolated private static let account = "history-encryption-key"
     nonisolated private static let keyLock = NSLock()
-    nonisolated private static let inMemoryKeyCache = NSCache<NSString, NSData>()
-    nonisolated private static let inMemoryKeyCacheKey: NSString = "history-encryption-key"
+    nonisolated(unsafe) private static let inMemoryKeyCache = NSCache<NSString, NSData>()
+    nonisolated private static let inMemoryKeyCacheKey = "history-encryption-key"
 
     nonisolated private struct EncryptedPayload: Codable {
         let version: Int
@@ -16,7 +16,7 @@ enum SecureHistoryCrypto {
         let tag: Data
     }
 
-    nonisolated static func encrypt(_ data: Data) throws -> Data {
+    public nonisolated static func encrypt(_ data: Data) throws -> Data {
         let key = try loadOrCreateKey()
         let sealed = try AES.GCM.seal(data, using: key)
         let payload = EncryptedPayload(
@@ -28,7 +28,7 @@ enum SecureHistoryCrypto {
         return try JSONEncoder().encode(payload)
     }
 
-    nonisolated static func decrypt(_ data: Data) throws -> Data {
+    public nonisolated static func decrypt(_ data: Data) throws -> Data {
         let key = try loadOrCreateKey()
         let payload = try JSONDecoder().decode(EncryptedPayload.self, from: data)
         let nonce = try AES.GCM.Nonce(data: payload.nonce)
@@ -36,7 +36,7 @@ enum SecureHistoryCrypto {
         return try AES.GCM.open(box, using: key)
     }
 
-    nonisolated static func prewarmKey() {
+    public nonisolated static func prewarmKey() {
         do {
             _ = try loadOrCreateKey()
         } catch {
@@ -45,14 +45,14 @@ enum SecureHistoryCrypto {
     }
 
     nonisolated private static func loadOrCreateKey() throws -> SymmetricKey {
-        if let cachedData = inMemoryKeyCache.object(forKey: inMemoryKeyCacheKey) {
+        if let cachedData = inMemoryKeyCache.object(forKey: inMemoryKeyCacheKey as NSString) {
             return SymmetricKey(data: cachedData as Data)
         }
 
         keyLock.lock()
         defer { keyLock.unlock() }
 
-        if let cachedData = inMemoryKeyCache.object(forKey: inMemoryKeyCacheKey) {
+        if let cachedData = inMemoryKeyCache.object(forKey: inMemoryKeyCacheKey as NSString) {
             return SymmetricKey(data: cachedData as Data)
         }
 
@@ -70,7 +70,7 @@ enum SecureHistoryCrypto {
             return SymmetricKey(data: persistedData)
         }
 
-        throw NSError(domain: "SecureHistoryCrypto", code: -1, userInfo: nil)
+        throw NSError(domain: "SecurityService", code: -1, userInfo: nil)
     }
 
     nonisolated private static func readKey() throws -> Data? {
@@ -90,7 +90,7 @@ enum SecureHistoryCrypto {
             return nil
         }
         guard status == errSecSuccess, let data = item as? Data else {
-            throw NSError(domain: "SecureHistoryCrypto", code: Int(status), userInfo: nil)
+            throw NSError(domain: "SecurityService", code: Int(status), userInfo: nil)
         }
         return data
     }
@@ -111,11 +111,11 @@ enum SecureHistoryCrypto {
         }
 
         guard status == errSecSuccess else {
-            throw NSError(domain: "SecureHistoryCrypto", code: Int(status), userInfo: nil)
+            throw NSError(domain: "SecurityService", code: Int(status), userInfo: nil)
         }
     }
 
     nonisolated private static func cacheKeyData(_ data: Data) {
-        inMemoryKeyCache.setObject(data as NSData, forKey: inMemoryKeyCacheKey)
+        inMemoryKeyCache.setObject(data as NSData, forKey: inMemoryKeyCacheKey as NSString)
     }
 }

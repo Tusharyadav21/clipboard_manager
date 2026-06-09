@@ -1,35 +1,6 @@
 import AppKit
 import ApplicationServices
 import Foundation
-import ServiceManagement
-
-enum AccessibilityHelper {
-    static func isTrusted() -> Bool {
-        AXIsProcessTrusted()
-    }
-
-    static func requestIfNeeded() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
-    }
-
-    static func openAccessibilitySettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
-            return
-        }
-        NSWorkspace.shared.open(url)
-    }
-
-    static func simulatePaste() {
-        let source = CGEventSource(stateID: .combinedSessionState)
-        let vDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
-        vDown?.flags = .maskCommand
-        let vUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-        vUp?.flags = .maskCommand
-        vDown?.post(tap: .cghidEventTap)
-        vUp?.post(tap: .cghidEventTap)
-    }
-}
 
 enum OverlayPositioningHelper {
     static func anchorPoint() -> CGPoint {
@@ -37,7 +8,7 @@ enum OverlayPositioningHelper {
             return CGPoint(x: caret.midX, y: caret.minY)
         }
         if let frame = focusedElementFrame() {
-            return CGPoint(x: frame.minX + 24, y: frame.minY)
+            return CGPoint(x: frame.minX + Constants.overlayAnchorOffset, y: frame.minY)
         }
         return NSEvent.mouseLocation
     }
@@ -113,7 +84,7 @@ enum OverlayPositioningHelper {
     }
 
     private static func focusedElement() -> AXUIElement? {
-        guard AccessibilityHelper.isTrusted() else { return nil }
+        guard PasteService.shared.isTrusted() else { return nil }
         let systemWide = AXUIElementCreateSystemWide()
         var focused: CFTypeRef?
         let focusedResult = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused)
@@ -121,30 +92,5 @@ enum OverlayPositioningHelper {
               let focused,
               CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
         return unsafeBitCast(focused, to: AXUIElement.self)
-    }
-}
-
-enum SettingsHelper {
-    static func setLaunchAtLogin(_ enabled: Bool) {
-        do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-        } catch {
-            NSLog("Failed to update login item: \(error)")
-        }
-    }
-}
-extension SettingsHelper {
-    static func excludeFrontmostApp() {
-        guard let frontmost = NSWorkspace.shared.frontmostApplication,
-              let bundleId = frontmost.bundleIdentifier else { return }
-        var exclusions = UserDefaults.standard.stringArray(forKey: SettingsKeys.exclusions) ?? []
-        if !exclusions.contains(bundleId) {
-            exclusions.append(bundleId)
-            UserDefaults.standard.set(exclusions, forKey: SettingsKeys.exclusions)
-        }
     }
 }

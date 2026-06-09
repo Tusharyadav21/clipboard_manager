@@ -2,8 +2,6 @@ import AppKit
 import Carbon
 import SwiftUI
 
-private let hotkeyDidChangeNotification = Notification.Name("hotkeyDidChange")
-
 private enum ShortcutKeyOption: String, CaseIterable, Identifiable {
     case v = "V"
     case c = "C"
@@ -51,7 +49,7 @@ private enum ShortcutModifierOption: String, CaseIterable, Identifiable {
 }
 
 struct SettingsView: View {
-    @EnvironmentObject private var store: ClipboardStore
+    @EnvironmentObject private var viewModel: ClipboardViewModel
     @AppStorage(SettingsKeys.persistHistory) private var persistHistory = true
     @AppStorage(SettingsKeys.launchAtLogin) private var launchAtLogin = false
     @AppStorage(SettingsKeys.autoPaste) private var autoPaste = true
@@ -63,6 +61,7 @@ struct SettingsView: View {
 
     @State private var exclusions: [String] = UserDefaults.standard.stringArray(forKey: SettingsKeys.exclusions) ?? []
     @State private var newExclusion = ""
+    @State private var isAccessibilityTrusted = PasteService.shared.isTrusted()
 
     private var selectedTheme: AppTheme {
         AppTheme.fromStored(appTheme)
@@ -85,7 +84,7 @@ struct SettingsView: View {
             get: { selectedKey },
             set: { option in
                 hotkeyKeyCode = Int(option.keyCode)
-                NotificationCenter.default.post(name: hotkeyDidChangeNotification, object: nil)
+                NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
             }
         )
     }
@@ -95,7 +94,7 @@ struct SettingsView: View {
             get: { selectedModifier },
             set: { option in
                 hotkeyModifiers = Int(option.carbonFlags)
-                NotificationCenter.default.post(name: hotkeyDidChangeNotification, object: nil)
+                NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
             }
         )
     }
@@ -126,6 +125,12 @@ struct SettingsView: View {
         }
         .preferredColorScheme(selectedTheme.colorScheme)
         .frame(width: 520, height: 560)
+        .onAppear {
+            isAccessibilityTrusted = PasteService.shared.isTrusted()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            isAccessibilityTrusted = PasteService.shared.isTrusted()
+        }
     }
 
     private var settingsHeader: some View {
@@ -174,7 +179,7 @@ struct SettingsView: View {
                 get: { persistHistory },
                 set: { value in
                     persistHistory = value
-                    store.setPersistHistoryEnabled(value)
+                    viewModel.setPersistHistoryEnabled(value)
                 }
             ))
 
@@ -190,13 +195,28 @@ struct SettingsView: View {
                 get: { autoPaste },
                 set: { value in
                     autoPaste = value
-                    if value { AccessibilityHelper.requestIfNeeded() }
+                    if value { PasteService.shared.requestIfNeeded() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        isAccessibilityTrusted = PasteService.shared.isTrusted()
+                    }
                 }
             ))
 
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(isAccessibilityTrusted ? Color.green : Color.red)
+                    .frame(width: 8, height: 8)
+                Text(isAccessibilityTrusted ? "Accessibility: Granted" : "Accessibility: Not Granted")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Button("Request Accessibility Access") {
-                AccessibilityHelper.requestIfNeeded()
-                AccessibilityHelper.openAccessibilitySettings()
+                PasteService.shared.requestIfNeeded()
+                PasteService.shared.openAccessibilitySettings()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    isAccessibilityTrusted = PasteService.shared.isTrusted()
+                }
             }
             .buttonStyle(.bordered)
         }
@@ -246,7 +266,7 @@ struct SettingsView: View {
                 get: { encryptHistoryAtRest },
                 set: { value in
                     encryptHistoryAtRest = value
-                    store.setEncryptHistoryAtRestEnabled(value)
+                    viewModel.setEncryptHistoryAtRestEnabled(value)
                 }
             ))
 
@@ -255,6 +275,36 @@ struct SettingsView: View {
                  : "History is stored locally without encryption.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "shield.checkered")
+                        .foregroundStyle(.green)
+                    Text("Sensitive Content Filtering: Active")
+                        .font(.subheadline.weight(.medium))
+                }
+                Text("Credentials from password managers (like 1Password), SSH keys, private keys, and API tokens are automatically screened and never stored in your history.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.2.circlepath")
+                        .foregroundStyle(.blue)
+                    Text("Automatic Pruning: Active")
+                        .font(.subheadline.weight(.medium))
+                }
+                Text("Clipboard history is limited to 50 items and automatically purged after 7 days to maximize privacy and minimize memory usage.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+
+            Divider()
 
             HStack(spacing: 8) {
                 TextField("Bundle ID to exclude", text: $newExclusion)

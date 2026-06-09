@@ -1,0 +1,40 @@
+# OS X metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Development tool folders
+.claude/
+.omx/
+.antigravity/
+build_output.log
+
+# Xcode build outputs and caches
+build/
+DerivedData/
+
+# Xcode user-specific settings and state
+*.xcuserstate
+project.xcworkspace/xcuserdata/
+xcuserdata/
+
+# Keep the project file and shared workspaces, ignore user settings
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcodeproj/project.xcworkspace/xcshareddata/
+*.xcworkspace/*
+!*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/xcshareddata/
+
+# Swift Package Manager caches
+.build/
+Packages/
+SourcePackages/
+
+# Build artifacts & distribution binaries
+*.app/
+*.dmg
