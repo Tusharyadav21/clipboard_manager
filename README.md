@@ -6,15 +6,13 @@ A production-grade, high-performance status bar utility for macOS (14.0+) built 
 
 ## Installation
 
-The recommended way to install the Clipboard Manager (which automatically bypasses macOS Gatekeeper warnings during installation) is via Homebrew:
+To download, install, and automatically bypass the macOS Gatekeeper malware verification on your Mac, run the following one-line command in your **Terminal**:
 
 ```bash
-# Add the custom tap
-brew tap Tusharyadav21/tap
-
-# Install the application
-brew install --cask clipboard-manager
+curl -fsSL https://raw.githubusercontent.com/Tusharyadav21/clipboard_manager/main/install.sh | bash
 ```
+
+This script fetches the latest `.dmg` release from GitHub, mounts it, installs it to your `/Applications` directory, and safely clears the macOS quarantine attribute so the app launches instantly without any warning popups.
 
 ---
 
