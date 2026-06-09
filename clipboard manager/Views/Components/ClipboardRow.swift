@@ -15,35 +15,33 @@ public struct ClipboardRow: View {
 
     public var body: some View {
         Button(action: handlePaste) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: 6) {
                 AppIcon(bundleId: item.sourceAppBundleId)
-                    .frame(width: 20, height: 20)
-                VStack(alignment: .leading, spacing: 4) {
+                    .frame(width: 16, height: 16)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
                     Text(item.text)
                         .lineLimit(2)
-                        .font(.system(size: 13, weight: .medium))
-                    HStack(spacing: 8) {
+                        .font(.system(size: 12, weight: .regular))
+                    HStack(spacing: 6) {
                         Text(item.sourceAppName ?? "Unknown")
-                        Text(".")
+                        Text("•")
                         Text(item.createdAt, style: .time)
                     }
-                    .font(.caption)
+                    .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if item.isPinned {
                     Image(systemName: "pin.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(8)
-            .background(.ultraThinMaterial.opacity(0.75))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? .blue.opacity(0.75) : .white.opacity(0.18), lineWidth: isSelected ? 1.6 : 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
+            .background(isSelected ? Color.blue.opacity(0.2) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
         .contextMenu {

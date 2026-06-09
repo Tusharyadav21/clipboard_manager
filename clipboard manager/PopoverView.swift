@@ -6,6 +6,7 @@ struct PopoverView: View {
     @AppStorage(SettingsKeys.autoPaste) private var autoPaste = true
     @AppStorage(SettingsKeys.glassIntensity) private var glassIntensity = 0.65
     @AppStorage(SettingsKeys.appTheme) private var appTheme = AppTheme.system.rawValue
+    @AppStorage(SettingsKeys.hasDismissedAccessibilityNotice) private var hasDismissedAccessibilityNotice = false
 
     let onSelectItem: (ClipboardItem) -> Void
     let onClose: () -> Void
@@ -31,21 +32,24 @@ struct PopoverView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(alignment: .top) {
             if showPermissionNotice {
-                PermissionBanner(onDismiss: { showPermissionNotice = false })
+                PermissionBanner(onDismiss: {
+                    showPermissionNotice = false
+                    hasDismissedAccessibilityNotice = true
+                })
                     .padding(.horizontal, 8)
                     .padding(.top, 6)
             }
         }
         .onAppear {
-            showPermissionNotice = autoPaste && !PasteService.shared.isTrusted()
+            showPermissionNotice = autoPaste && !PasteService.shared.isTrusted() && !hasDismissedAccessibilityNotice
             selectFirstIfNeeded()
             isSearchFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            showPermissionNotice = autoPaste && !PasteService.shared.isTrusted()
+            showPermissionNotice = autoPaste && !PasteService.shared.isTrusted() && !hasDismissedAccessibilityNotice
         }
         .onChange(of: autoPaste) { _, newValue in
-            showPermissionNotice = newValue && !PasteService.shared.isTrusted()
+            showPermissionNotice = newValue && !PasteService.shared.isTrusted() && !hasDismissedAccessibilityNotice
         }
         .onChange(of: viewModel.searchQuery) { _, _ in
             selectFirstIfNeeded()
@@ -72,7 +76,6 @@ struct PopoverView: View {
             pasteSelected()
         }
         .preferredColorScheme(AppTheme.fromStored(appTheme).colorScheme)
-        .padding(6)
         .alert("Clear non-pinned items?", isPresented: $showClearConfirmation) {
             Button("Clear", role: .destructive) {
                 viewModel.clearNonPinned()
@@ -84,16 +87,15 @@ struct PopoverView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 8) {
-            SearchBar(text: $viewModel.searchQuery, isFocused: $isSearchFocused)
-            headerActions
+        VStack(spacing: 4) {
+            headerView
 
             if viewModel.pinnedItems.isEmpty && viewModel.recentItems.isEmpty {
                 emptyState
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 8) {
+                        LazyVStack(spacing: 4) {
                             if !viewModel.pinnedItems.isEmpty {
                                 SectionHeader(title: "Pinned")
                                 ForEach(viewModel.pinnedItems) { item in
@@ -130,20 +132,24 @@ struct PopoverView: View {
                 }
             }
         }
-        .padding(10)
+        .padding(6)
         .environmentObject(viewModel)
     }
 
-    private var headerActions: some View {
-        HStack(spacing: 6) {
-            Button("Clear Non-Pinned") {
-                showClearConfirmation = true
+    private var headerView: some View {
+        HStack(spacing: 8) {
+            SearchBar(text: $viewModel.searchQuery, isFocused: $isSearchFocused)
+            
+            Button(action: { showClearConfirmation = true }) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderedProminent)
-
-            Spacer()
-
-            Menu("More") {
+            .buttonStyle(.plain)
+            .help("Clear Non-Pinned")
+            
+            Menu {
                 Button("Exclude Frontmost App") {
                     excludeFrontmostApp()
                 }
@@ -154,7 +160,15 @@ struct PopoverView: View {
                 Button("Quit Clipboard Manager") {
                     NSApp.terminate(nil)
                 }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
             }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
     }
 

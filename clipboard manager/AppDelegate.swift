@@ -102,9 +102,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Clipboard Manager")
-            button.action = #selector(toggleOverlay(_:))
-            button.target = self
         }
+
+        let menu = NSMenu()
+        menu.delegate = self
+        statusItem?.menu = menu
 
         eventMonitor = EventMonitor(mask: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self,
@@ -234,7 +236,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     await PasteService.shared.paste(item: item, targetApp: target)
                 }
             } else {
-                showAccessibilityAlert()
+                let hasDismissed = UserDefaults.standard.bool(forKey: SettingsKeys.hasDismissedAccessibilityNotice)
+                if !hasDismissed {
+                    showAccessibilityAlert()
+                } else {
+                    target?.activate(options: [.activateIgnoringOtherApps])
+                }
             }
         } else {
             // Just activate the target application and copy the text
@@ -324,6 +331,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
             PasteService.shared.openAccessibilitySettings()
+        } else {
+            UserDefaults.standard.set(true, forKey: SettingsKeys.hasDismissedAccessibilityNotice)
         }
     }
 
@@ -338,6 +347,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         settingsWindow = nil
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        
+        let recentItems = viewModel.recentItems.prefix(15)
+        for item in recentItems {
+            let truncatedText = item.text.replacingOccurrences(of: "\n", with: " ")
+            let title = truncatedText.count > 40 ? String(truncatedText.prefix(40)) + "..." : truncatedText
+            let menuItem = NSMenuItem(title: title, action: #selector(handleMenuSelection(_:)), keyEquivalent: "")
+            menuItem.target = self
+            menuItem.representedObject = item
+            if let bundleId = item.sourceAppBundleId, let appUrl = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
+                menuItem.image = NSWorkspace.shared.icon(forFile: appUrl.path)
+                menuItem.image?.size = NSSize(width: 16, height: 16)
+            }
+            menu.addItem(menuItem)
+        }
+        
+        if recentItems.isEmpty {
+            let emptyItem = NSMenuItem(title: "No Recent Items", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            menu.addItem(emptyItem)
+        }
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettingsWindowFromMenu), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+    }
+
+    @objc private func handleMenuSelection(_ sender: NSMenuItem) {
+        if let item = sender.representedObject as? ClipboardItem {
+            handleSelection(item: item)
+        }
+    }
+    
+    @objc private func showSettingsWindowFromMenu() {
+        showSettingsWindow()
+    }
+    
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
     }
 }
 

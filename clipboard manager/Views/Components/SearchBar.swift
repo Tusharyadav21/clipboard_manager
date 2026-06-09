@@ -16,12 +16,12 @@ public struct SearchBar: View {
                 .textFieldStyle(.plain)
                 .focused(isFocused)
         }
-        .padding(8)
+        .padding(6)
         .background(.ultraThinMaterial.opacity(0.8))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(.white.opacity(0.2), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

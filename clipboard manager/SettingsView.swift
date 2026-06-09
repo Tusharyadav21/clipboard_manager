@@ -212,6 +212,7 @@ struct SettingsView: View {
             }
 
             Button("Request Accessibility Access") {
+                UserDefaults.standard.set(false, forKey: SettingsKeys.hasDismissedAccessibilityNotice)
                 PasteService.shared.requestIfNeeded()
                 PasteService.shared.openAccessibilitySettings()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {

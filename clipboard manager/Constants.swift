@@ -46,4 +46,5 @@ public enum SettingsKeys {
     nonisolated public static let encryptHistoryAtRest = "encryptHistoryAtRest"
     nonisolated public static let appTheme = "appTheme"
     nonisolated public static let exclusions = "exclusions"
+    nonisolated public static let hasDismissedAccessibilityNotice = "hasDismissedAccessibilityNotice"
 }
