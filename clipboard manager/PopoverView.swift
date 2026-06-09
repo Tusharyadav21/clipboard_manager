@@ -41,6 +41,12 @@ struct PopoverView: View {
             selectFirstIfNeeded()
             isSearchFocused = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            showPermissionNotice = autoPaste && !PasteService.shared.isTrusted()
+        }
+        .onChange(of: autoPaste) { _, newValue in
+            showPermissionNotice = newValue && !PasteService.shared.isTrusted()
+        }
         .onChange(of: viewModel.searchQuery) { _, _ in
             selectFirstIfNeeded()
         }

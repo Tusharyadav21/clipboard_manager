@@ -38,24 +38,43 @@ nonisolated public struct LegacyJSONImporter {
     }
     
     private static func decodeItems(from data: Data, preferEncrypted: Bool) -> [ClipboardItem]? {
+        let decoder = JSONDecoder()
+        
+        func tryDecode(data: Data) -> [ClipboardItem]? {
+            do {
+                return try decoder.decode([ClipboardItem].self, from: data)
+            } catch {
+                NSLog("JSON decoding failed: \(error)")
+                return nil
+            }
+        }
+        
+        func tryDecryptAndDecode(data: Data) -> [ClipboardItem]? {
+            do {
+                let decrypted = try SecurityService.decrypt(data)
+                return try decoder.decode([ClipboardItem].self, from: decrypted)
+            } catch {
+                NSLog("Decrypt and decode failed: \(error)")
+                return nil
+            }
+        }
+        
         if preferEncrypted {
-            if let decrypted = try? SecurityService.decrypt(data),
-               let items = try? JSONDecoder().decode([ClipboardItem].self, from: decrypted) {
+            if let items = tryDecryptAndDecode(data: data) {
                 return items
             }
-            if let items = try? JSONDecoder().decode([ClipboardItem].self, from: data) {
+            if let items = tryDecode(data: data) {
+                return items
+            }
+            return nil
+        } else {
+            if let items = tryDecode(data: data) {
+                return items
+            }
+            if let items = tryDecryptAndDecode(data: data) {
                 return items
             }
             return nil
         }
-        
-        if let items = try? JSONDecoder().decode([ClipboardItem].self, from: data) {
-            return items
-        }
-        if let decrypted = try? SecurityService.decrypt(data),
-           let items = try? JSONDecoder().decode([ClipboardItem].self, from: decrypted) {
-            return items
-        }
-        return nil
     }
 }

@@ -14,7 +14,7 @@ public final class PasteService {
 
     public func requestIfNeeded() {
         guard !isTrusted() else { return }
-        let key = "axTrustedCheckOptionPrompt" as CFString
+        let key = "AXTrustedCheckOptionPrompt" as CFString
         let options = [key: true as CFBoolean] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
