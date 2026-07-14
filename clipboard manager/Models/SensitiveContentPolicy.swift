@@ -34,7 +34,7 @@ nonisolated public struct SensitiveContentPolicy {
             "xox[baprs]-[0-9]{10,12}-[0-9]{10,12}-[a-zA-Z0-9]{24}",
             
             // JSON Web Token (JWT)
-            "eyJ[A-Za-z0-9-_=]+\\.[eyJ[A-Za-z0-9-_=]+\\.[A-Za-z0-9-_=]+"
+            "eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"
         ]
         return patterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
     }()

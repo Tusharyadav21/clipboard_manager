@@ -36,8 +36,12 @@ public final class ClipboardMonitorService: Sendable {
                 let result = await MainActor.run { () -> (String, String?, String?)? in
                     autoreleasepool {
                         let pb = NSPasteboard.general
-                        // Exclude sensitive inputs early
-                        guard !SensitiveContentPolicy.isSensitive(pasteboard: pb) else { return nil }
+                        // Quick type-only check — full regex scan happens in ClipboardService
+                        if let types = pb.types {
+                            for type in SensitiveContentPolicy.sensitiveTypes where types.contains(type) {
+                                return nil
+                            }
+                        }
                         
                         if let text = pb.string(forType: .string) {
                             let source = NSWorkspace.shared.frontmostApplication

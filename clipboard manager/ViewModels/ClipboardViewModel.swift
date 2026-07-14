@@ -7,17 +7,47 @@ public final class ClipboardViewModel: ObservableObject {
     @Published public private(set) var items: [ClipboardItem] = []
     @Published public var searchQuery: String = ""
     @Published public var showOnboarding: Bool = false
+    @Published public private(set) var searchResults: [ClipboardItem]?
     
     private let clipboardService: ClipboardService
+    private var searchTask: Task<Void, Never>?
+    private var queryCancellable: AnyCancellable?
     
     public init(clipboardService: ClipboardService) {
         self.clipboardService = clipboardService
+        queryCancellable = $searchQuery
+            .removeDuplicates()
+            .debounce(for: .milliseconds(150), scheduler: DispatchQueue.main)
+            .sink { [weak self] query in
+                self?.performSearch(query)
+            }
     }
     
     public var filteredItems: [ClipboardItem] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty { return items }
-        return items.filter { $0.text.localizedStandardContains(query) }
+        return searchResults ?? items.filter { $0.text.localizedStandardContains(query) }
+    }
+    
+    private func performSearch(_ rawQuery: String) {
+        searchTask?.cancel()
+        let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            searchResults = nil
+            return
+        }
+        searchTask = Task {
+            do {
+                let results = try await clipboardService.search(query)
+                if !Task.isCancelled {
+                    self.searchResults = results
+                }
+            } catch {
+                if !Task.isCancelled {
+                    self.searchResults = items.filter { $0.text.localizedStandardContains(query) }
+                }
+            }
+        }
     }
     
     public var pinnedItems: [ClipboardItem] {

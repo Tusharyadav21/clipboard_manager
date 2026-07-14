@@ -59,7 +59,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.hotkeyKeyCode) private var hotkeyKeyCode = Int(UInt32(kVK_ANSI_V))
     @AppStorage(SettingsKeys.hotkeyModifiers) private var hotkeyModifiers = Int(UInt32(cmdKey) | UInt32(shiftKey))
 
-    @State private var exclusions: [String] = UserDefaults.standard.stringArray(forKey: SettingsKeys.exclusions) ?? []
+    @State private var exclusions: [String] = []
     @State private var newExclusion = ""
     @State private var isAccessibilityTrusted = PasteService.shared.isTrusted()
 
@@ -127,6 +127,7 @@ struct SettingsView: View {
         .frame(width: 520, height: 560)
         .onAppear {
             isAccessibilityTrusted = PasteService.shared.isTrusted()
+            exclusions = UserDefaults.standard.stringArray(forKey: SettingsKeys.exclusions) ?? []
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             isAccessibilityTrusted = PasteService.shared.isTrusted()

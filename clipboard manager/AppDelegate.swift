@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     nonisolated(unsafe) private var keyMonitor: Any?
     private var pasteTargetApp: NSRunningApplication?
     private var memoryPressureSource: DispatchSourceMemoryPressure?
+    private var hasPromptedAccessibilityThisSession = false
 
     override init() {
         do {
@@ -28,7 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let dir = appSupport.appendingPathComponent("ClipboardManager", isDirectory: true)
             let dbURL = dir.appendingPathComponent("clipboard_history.sqlite")
             
-            let repo = try GRDBClipboardRepository(databaseURL: dbURL)
+            let repo = try GRDBClipboardRepository(
+                databaseURL: dbURL,
+                encryptionEnabled: { UserDefaults.standard.bool(forKey: SettingsKeys.encryptHistoryAtRest) }
+            )
             self.repository = repo
             
             let service = ClipboardService(repository: repo)
@@ -196,7 +200,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func closeOverlay() {
         overlayPanel?.orderOut(nil)
-        AppIconCache.shared.clear()
     }
 
     private func showSettingsWindow() {
@@ -236,12 +239,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     await PasteService.shared.paste(item: item, targetApp: target)
                 }
             } else {
-                let hasDismissed = UserDefaults.standard.bool(forKey: SettingsKeys.hasDismissedAccessibilityNotice)
-                if !hasDismissed {
-                    showAccessibilityAlert()
-                } else {
-                    target?.activate(options: [.activateIgnoringOtherApps])
+                if !hasPromptedAccessibilityThisSession {
+                    hasPromptedAccessibilityThisSession = true
+                    PasteService.shared.requestIfNeeded()
                 }
+                target?.activate(options: [.activateIgnoringOtherApps])
             }
         } else {
             // Just activate the target application and copy the text
@@ -319,23 +321,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         memoryPressureSource = source
     }
 
-    private func showAccessibilityAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Accessibility Access Required"
-        alert.informativeText = "Direct paste requires Accessibility access. Please enable it in System Preferences."
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Cancel")
-        alert.alertStyle = .warning
-
-        alert.window.center()
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            PasteService.shared.openAccessibilitySettings()
-        } else {
-            UserDefaults.standard.set(true, forKey: SettingsKeys.hasDismissedAccessibilityNotice)
-        }
-    }
-
     deinit {
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
@@ -405,6 +390,7 @@ final class OverlayPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
+@MainActor
 final class EventMonitor {
     nonisolated(unsafe) private var monitor: Any?
     private let mask: NSEvent.EventTypeMask

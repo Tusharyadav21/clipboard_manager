@@ -7,8 +7,10 @@ nonisolated extension ClipboardItem: FetchableRecord, TableRecord, PersistableRe
 
 nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @unchecked Sendable {
     private let dbQueue: DatabaseQueue
+    private let encryptionEnabled: @Sendable () -> Bool
     
-    public init(databaseURL: URL?, inMemory: Bool = false) throws {
+    public init(databaseURL: URL?, inMemory: Bool = false, encryptionEnabled: @escaping @Sendable () -> Bool = { false }) throws {
+        self.encryptionEnabled = encryptionEnabled
         var config = Configuration()
         config.prepareDatabase { db in
             try? db.execute(sql: "PRAGMA journal_mode = WAL;")
@@ -26,14 +28,32 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
             throw DatabaseError(message: "Database URL or inMemory must be provided")
         }
         
-        // Run migrations
         let migrator = DatabaseMigratorFactory.makeMigrator()
         try migrator.migrate(dbQueue)
     }
     
+    private func encryptItem(_ item: ClipboardItem) throws -> ClipboardItem {
+        guard encryptionEnabled() else { return item }
+        let textData = Data(item.text.utf8)
+        let encrypted = try SecurityService.encrypt(textData)
+        var copy = item
+        copy.text = encrypted.base64EncodedString()
+        return copy
+    }
+    
+    private func decryptItem(_ item: ClipboardItem) -> ClipboardItem {
+        guard encryptionEnabled(), let encryptedData = Data(base64Encoded: item.text) else { return item }
+        guard let decryptedData = try? SecurityService.decrypt(encryptedData) else { return item }
+        guard let decryptedText = String(data: decryptedData, encoding: .utf8) else { return item }
+        var copy = item
+        copy.text = decryptedText
+        return copy
+    }
+    
     public func save(_ item: ClipboardItem) async throws {
+        let itemToSave = try encryptItem(item)
         try await dbQueue.write { db in
-            try item.save(db)
+            try itemToSave.save(db)
         }
     }
     
@@ -52,6 +72,7 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
                     Column("createdAt").desc
                 )
                 .fetchAll(db)
+                .map { self.decryptItem($0) }
         }
     }
     
@@ -59,6 +80,11 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else {
             return try await fetchAll()
+        }
+        
+        if encryptionEnabled() {
+            let allItems = try await fetchAll()
+            return allItems.filter { $0.text.localizedStandardContains(trimmedQuery) }
         }
         
         return try await dbQueue.read { db in
@@ -74,10 +100,13 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
     }
     
     private func cleanSearchQuery(_ query: String) -> String {
+        let specialChars = CharacterSet(charactersIn: "^\"*+-~()<>")
         let components = query.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
+            .map { $0.components(separatedBy: specialChars).joined() }
+            .filter { !$0.isEmpty }
             .map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"*" }
-        return components.joined(separator: " AND ")
+        return components.isEmpty ? "" : components.joined(separator: " AND ")
     }
     
     public func clearNonPinned() async throws {
@@ -92,7 +121,6 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
         try await dbQueue.write { db in
             var deletedCount = 0
             
-            // 1. Age-based expiration (e.g. 7 days old)
             if maxAgeDays > 0 {
                 let cutoffDate = Calendar.current.date(byAdding: .day, value: -maxAgeDays, to: Date()) ?? Date()
                 deletedCount += try ClipboardItem
@@ -100,7 +128,6 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
                     .deleteAll(db)
             }
             
-            // 2. Count-based pruning of pinned items
             if maxPinnedCount > 0 {
                 let pinnedItems = try ClipboardItem
                     .filter(Column("isPinned") == true)
@@ -114,13 +141,8 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
                         .filter(!toKeepIds.contains(Column("id")))
                         .deleteAll(db)
                 }
-            } else if maxPinnedCount == 0 {
-                deletedCount += try ClipboardItem
-                    .filter(Column("isPinned") == true)
-                    .deleteAll(db)
             }
             
-            // 3. Count-based pruning of recent items
             if maxRecentCount > 0 {
                 let recentItems = try ClipboardItem
                     .filter(Column("isPinned") == false)
@@ -134,13 +156,24 @@ nonisolated public final class GRDBClipboardRepository: ClipboardRepository, @un
                         .filter(!toKeepIds.contains(Column("id")))
                         .deleteAll(db)
                 }
-            } else if maxRecentCount == 0 {
-                deletedCount += try ClipboardItem
-                    .filter(Column("isPinned") == false)
-                    .deleteAll(db)
             }
             
             return deletedCount
+        }
+    }
+    
+    public func deleteAll() async throws {
+        try await dbQueue.write { db in
+            try ClipboardItem.deleteAll(db)
+        }
+    }
+    
+    public func saveBatch(_ items: [ClipboardItem]) async throws {
+        let itemsToSave = try items.map { try encryptItem($0) }
+        try await dbQueue.write { db in
+            for item in itemsToSave {
+                try item.save(db)
+            }
         }
     }
 }

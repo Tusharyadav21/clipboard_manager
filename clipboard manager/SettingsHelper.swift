@@ -3,6 +3,7 @@ import Foundation
 import ServiceManagement
 
 enum SettingsHelper {
+    @MainActor
     static func setLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled {
@@ -12,6 +13,12 @@ enum SettingsHelper {
             }
         } catch {
             NSLog("Failed to update login item: \(error)")
+            let alert = NSAlert()
+            alert.messageText = "Launch at Login"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
         }
     }
 

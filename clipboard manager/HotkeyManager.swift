@@ -9,7 +9,6 @@ final class HotkeyManager {
 
     nonisolated(unsafe) private var hotKeyRef: EventHotKeyRef?
     nonisolated(unsafe) private var eventHandlerRef: EventHandlerRef?
-    nonisolated(unsafe) private var userDataPtr: UnsafeMutableRawPointer?
 
     func registerDefault() {
         register(keyCode: Self.defaultKeyCode, modifiers: Self.defaultModifiers)
@@ -38,9 +37,7 @@ final class HotkeyManager {
             eventKind: UInt32(kEventHotKeyPressed)
         )
 
-        let userDataPtr = Unmanaged.passRetained(self).toOpaque()
-        self.userDataPtr = userDataPtr
-
+        let this = self
         let status = InstallEventHandler(
             GetEventDispatcherTarget(),
             { _, _, userData in
@@ -51,7 +48,7 @@ final class HotkeyManager {
             },
             1,
             &eventSpec,
-            userDataPtr,
+            Unmanaged.passUnretained(this).toOpaque(),
             &eventHandlerRef
         )
 
@@ -67,15 +64,22 @@ final class HotkeyManager {
         hotKeyRef = nil
     }
 
-    deinit {
-        if let hotKeyRef {
-            UnregisterEventHotKey(hotKeyRef)
-        }
+    func cancel() {
         if let eventHandlerRef {
             RemoveEventHandler(eventHandlerRef)
         }
-        if let userDataPtr {
-            Unmanaged<HotkeyManager>.fromOpaque(userDataPtr).release()
+        eventHandlerRef = nil
+        unregisterHotKey()
+    }
+
+    deinit {
+        if let eventHandlerRef {
+            RemoveEventHandler(eventHandlerRef)
         }
+        eventHandlerRef = nil
+        if let hotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+        }
+        hotKeyRef = nil
     }
 }

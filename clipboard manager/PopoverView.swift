@@ -22,24 +22,10 @@ struct PopoverView: View {
         ZStack {
             GlassBackground(intensity: glassIntensity)
             RoundedRectangle(cornerRadius: 22)
-                .fill(.white.opacity(0.08 + (glassIntensity * 0.08)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(.white.opacity(0.28), lineWidth: 1)
-                )
+                .stroke(.white.opacity(0.12), lineWidth: 1)
             content
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(alignment: .top) {
-            if showPermissionNotice {
-                PermissionBanner(onDismiss: {
-                    showPermissionNotice = false
-                    hasDismissedAccessibilityNotice = true
-                })
-                    .padding(.horizontal, 8)
-                    .padding(.top, 6)
-            }
-        }
         .onAppear {
             showPermissionNotice = autoPaste && !PasteService.shared.isTrusted() && !hasDismissedAccessibilityNotice
             selectFirstIfNeeded()
@@ -87,15 +73,23 @@ struct PopoverView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 2) {
             headerView
+
+            if showPermissionNotice {
+                PermissionBanner(onDismiss: {
+                    showPermissionNotice = false
+                    hasDismissedAccessibilityNotice = true
+                })
+                .padding(.horizontal, 2)
+            }
 
             if viewModel.pinnedItems.isEmpty && viewModel.recentItems.isEmpty {
                 emptyState
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 4) {
+                        LazyVStack(spacing: 2) {
                             if !viewModel.pinnedItems.isEmpty {
                                 SectionHeader(title: "Pinned")
                                 ForEach(viewModel.pinnedItems) { item in
@@ -119,7 +113,7 @@ struct PopoverView: View {
                                 }
                             }
                         }
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 4)
                     }
                     .scrollIndicators(.never)
                     .onChange(of: pendingScrollID) { _, newValue in
@@ -132,17 +126,17 @@ struct PopoverView: View {
                 }
             }
         }
-        .padding(6)
+        .padding(4)
         .environmentObject(viewModel)
     }
 
     private var headerView: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
             SearchBar(text: $viewModel.searchQuery, isFocused: $isSearchFocused)
             
             Button(action: { showClearConfirmation = true }) {
                 Image(systemName: "trash")
-                    .font(.system(size: 14))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .contentShape(Rectangle())
             }
@@ -162,7 +156,7 @@ struct PopoverView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 14))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .contentShape(Rectangle())
             }
@@ -173,16 +167,17 @@ struct PopoverView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 4) {
             Image(systemName: "doc.on.clipboard")
-                .font(.system(size: 32))
+                .font(.system(size: 20))
+                .foregroundStyle(.secondary)
             Text("No clipboard items yet")
-                .font(.headline)
+                .font(.subheadline.weight(.medium))
             Text("Copy text to see it appear here.")
-                .font(.subheadline)
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .padding(.top, 24)
+        .padding(.top, 12)
     }
 
     private func excludeFrontmostApp() {

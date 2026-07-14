@@ -20,9 +20,7 @@ nonisolated public struct LegacyJSONImporter {
             
             if let items = decodeItems(from: data, preferEncrypted: encryptAtRest) {
                 NSLog("Decoded \(items.count) legacy items. Saving to database...")
-                for item in items {
-                    try? await repository.save(item)
-                }
+                try? await repository.saveBatch(items)
                 
                 // Back up the legacy file instead of deleting immediately, to prevent data loss
                 let backupURL = legacyJSONURL.appendingPathExtension("bak")

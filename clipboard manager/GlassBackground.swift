@@ -8,13 +8,16 @@ struct GlassBackground: NSViewRepresentable {
         let view = NSVisualEffectView()
         view.state = .active
         view.blendingMode = .behindWindow
-        view.material = .hudWindow
+        view.material = .popover
         view.isEmphasized = intensity >= 0.6
+        view.wantsLayer = true
+        view.layer?.cornerRadius = 22
+        view.layer?.masksToBounds = true
         return view
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = .hudWindow
+        nsView.material = .popover
         nsView.isEmphasized = intensity >= 0.6
     }
 }

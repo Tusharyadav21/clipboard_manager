@@ -8,11 +8,15 @@ public struct SectionHeader: View {
     }
 
     public var body: some View {
-        HStack {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(.secondary.opacity(0.5))
+                .frame(width: 4, height: 4)
             Text(title)
-                .font(.subheadline.weight(.semibold))
-            Spacer()
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 4)
+        .padding(.leading, 4)
+        .padding(.vertical, 2)
     }
 }

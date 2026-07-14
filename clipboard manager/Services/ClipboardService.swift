@@ -9,6 +9,15 @@ public actor ClipboardService {
         self.repository = repository
     }
     
+    private func persist<T>(_ operation: String, _ work: () async throws -> T) async -> T? {
+        do {
+            return try await work()
+        } catch {
+            NSLog("ClipboardService: \(operation) failed: \(error)")
+            return nil
+        }
+    }
+    
     private var isPersistenceEnabled: Bool {
         UserDefaults.standard.bool(forKey: SettingsKeys.persistHistory)
     }
@@ -25,6 +34,13 @@ public actor ClipboardService {
             self.items = []
         }
         return items
+    }
+    
+    public func search(_ query: String) async throws -> [ClipboardItem] {
+        guard isPersistenceEnabled else {
+            return items.filter { $0.text.localizedStandardContains(query) }
+        }
+        return try await repository.search(query: query)
     }
     
     public func getItems() -> [ClipboardItem] {
@@ -47,7 +63,7 @@ public actor ClipboardService {
             items.insert(existing, at: 0)
             
             if isPersistenceEnabled {
-                try? await repository.save(existing)
+                await persist("save.existing") { try await repository.save(existing) }
             }
         } else {
             let newItem = ClipboardItem(
@@ -58,7 +74,7 @@ public actor ClipboardService {
             items.insert(newItem, at: 0)
             
             if isPersistenceEnabled {
-                try? await repository.save(newItem)
+                await persist("save.new") { try await repository.save(newItem) }
             }
         }
         
@@ -71,7 +87,7 @@ public actor ClipboardService {
         items[index].isPinned.toggle()
         
         if isPersistenceEnabled {
-            try? await repository.save(items[index])
+            await persist("togglePin.save") { try await repository.save(items[index]) }
         }
         
         sortPinnedFirst()
@@ -83,7 +99,7 @@ public actor ClipboardService {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return items }
         items[index].lastUsedAt = Date()
         if isPersistenceEnabled {
-            try? await repository.save(items[index])
+            await persist("touchItem.save") { try await repository.save(items[index]) }
         }
         return items
     }
@@ -91,7 +107,7 @@ public actor ClipboardService {
     public func delete(_ item: ClipboardItem) async throws -> [ClipboardItem] {
         items.removeAll { $0.id == item.id }
         if isPersistenceEnabled {
-            try? await repository.delete(id: item.id)
+            await persist("delete") { try await repository.delete(id: item.id) }
         }
         return items
     }
@@ -99,20 +115,16 @@ public actor ClipboardService {
     public func clearNonPinned() async throws -> [ClipboardItem] {
         items.removeAll { !$0.isPinned }
         if isPersistenceEnabled {
-            try? await repository.clearNonPinned()
+            await persist("clearNonPinned") { try await repository.clearNonPinned() }
         }
         return items
     }
     
     public func setPersistHistoryEnabled(_ enabled: Bool) async throws -> [ClipboardItem] {
         if enabled {
-            // Save all current memory items to repository
-            for item in items {
-                try? await repository.save(item)
-            }
+            await persist("saveBatch") { try await repository.saveBatch(items) }
         } else {
-            // Clear repository data completely
-            _ = try? await repository.prune(maxRecentCount: 0, maxPinnedCount: 0, maxAgeDays: 0)
+            await persist("deleteAll") { try await repository.deleteAll() }
         }
         return items
     }
@@ -120,10 +132,10 @@ public actor ClipboardService {
     public func pruneItems() async throws {
         let maxRecent = Constants.maxRecentItems
         let maxPinned = Constants.maxPinnedItems
-        let maxAgeDays = 7 // per user choice: 7 days
+        let maxAgeDays = Constants.autoDeleteDays
         
         if isPersistenceEnabled {
-            _ = try? await repository.prune(maxRecentCount: maxRecent, maxPinnedCount: maxPinned, maxAgeDays: maxAgeDays)
+            await persist("prune") { try await repository.prune(maxRecentCount: maxRecent, maxPinnedCount: maxPinned, maxAgeDays: maxAgeDays) }
             self.items = try await repository.fetchAll()
         } else {
             // In-memory only pruning

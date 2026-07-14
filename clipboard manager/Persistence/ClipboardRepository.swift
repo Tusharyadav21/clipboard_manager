@@ -17,6 +17,13 @@ public protocol ClipboardRepository: Sendable {
     func clearNonPinned() async throws
     
     /// Prune items exceeding the count limit or older than the specified age.
-    /// Returns the list of deleted items (or just performs deletion).
+    /// Pass 0 or negative to skip a pruning dimension.
+    /// Returns the number of items deleted.
     func prune(maxRecentCount: Int, maxPinnedCount: Int, maxAgeDays: Int) async throws -> Int
+    
+    /// Delete every item in the repository.
+    func deleteAll() async throws
+    
+    /// Save multiple items in a single transaction.
+    func saveBatch(_ items: [ClipboardItem]) async throws
 }
