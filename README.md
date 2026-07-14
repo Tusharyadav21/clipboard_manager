@@ -1,154 +1,58 @@
-# macOS Clipboard Manager (Modernized & Hardened)
+# Clipboard Manager
 
-A production-grade, high-performance status bar utility for macOS (14.0+) built from the ground up using **SwiftUI**, **Swift 6 Strict Concurrency**, and **GRDB SQLite** persistence. This application provides secure, local-first clipboard history tracking with advanced sensitive-content filtering and sub-millisecond full-text search.
+A privacy-first, local-only clipboard history manager for macOS 14+. Sits in your menu bar and keeps your copy history searchable, organized, and secure.
 
----
-
-## Installation
-
-To download, install, and automatically bypass the macOS Gatekeeper malware verification on your Mac, run the following one-line command in your **Terminal**:
+## Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Tusharyadav21/clipboard_manager/main/install.sh | bash
 ```
 
-This script fetches the latest `.dmg` release from GitHub, mounts it, installs it to your `/Applications` directory, and safely clears the macOS quarantine attribute so the app launches instantly without any warning popups.
+Downloads the latest DMG from GitHub, installs to `/Applications`, and removes the quarantine flag.
 
----
+Or grab the DMG manually from [Releases](https://github.com/Tusharyadav21/clipboard_manager/releases).
 
-## Key Features & Modernizations
+## Features
 
-### 🚀 Performance & Architecture (Swift 6 + GRDB)
-- **Strict Concurrency**: Fully conformed to the Swift 6 concurrency model (`SWIFT_STRICT_CONCURRENCY = complete`). Heavy tasks are isolated off the main thread inside a background Swift `actor` (`ClipboardService.swift`).
-- **GRDB.swift Database Engine**: Replaced legacy, slow, and insecure JSON file writes with a transactional SQLite repository utilizing Write-Ahead Logging (WAL) and synchronous normal mode for zero lag and high reliability.
-- **Auto-Pruning & Storage Limits**: Enforces a strict capacity cap of **50 items** (pinned + recent) and a **7-day auto-expiry** policy to keep memory usage and disk footprint minimal.
-- **SQLite FTS5 Full-Text Search**: Instantly query thousands of items with full-text search indexing synchronized automatically via database triggers.
-- **Legacy Migration**: Gracefully migrates pre-existing JSON history items from `history.json` to the database on launch, backing up the old file to `history.json.bak`.
+- **Menu bar app** — no dock icon, always accessible
+- **Instant FTS5 search** across your full history
+- **Auto-pruning** — keeps 50 items max, purges after 7 days
+- **Sensitive content screening** — drops API keys, JWTs, SSH keys, and password manager output before they hit storage
+- **AES-GCM encryption** at rest (optional, Keychain-backed keys)
+- **Direct paste** — Cmd+Shift+V to open overlay, select and auto-paste via Accessibility API
+- **Per-app exclusions** — exclude specific apps from history
+- **Customizable hotkey** (default: Cmd+Shift+V)
+- **Glassmorphism UI** with light/dark/system theme support
 
-### 🛡️ Security Hardening (Sensitive Content Policy)
-- **Automatic Screening**: Scans clipboard data in real-time to drop sensitive tokens before they are persisted:
-  - AWS, GitHub, Stripe, Slack, and generic API tokens.
-  - SSH / PGP private keys.
-  - JWTs and high-entropy credentials.
-- **Password Manager Integration**: Automatically ignores pasteboard types marked as transient or concealed (e.g., from **1Password**, **Bitwarden**, or native Keychain).
-- **Secure Persistence**: Database initialization interfaces with **Keychain-backed database encryption keys** for state-of-the-art data confidentiality.
+## Usage
 
-### 🎨 Premium UI/UX (Decomposed & Modernized)
-- **Glassmorphic popover overlay panel** with blur effects and active hover animations.
-- **Fully Decomposed Components**: Clean modular structure:
-  - [AppIcon.swift](file:///Users/tusharyadav/Dev/clipboard_manager_macos/clipboard%20manager/Views/Components/AppIcon.swift) (with cached thumbnail rendering)
-  - [SearchBar.swift](file:///Users/tusharyadav/Dev/clipboard_manager_macos/clipboard%20manager/Views/Components/SearchBar.swift)
-  - [ClipboardRow.swift](file:///Users/tusharyadav/Dev/clipboard_manager_macos/clipboard%20manager/Views/Components/ClipboardRow.swift)
-  - [OnboardingView.swift](file:///Users/tusharyadav/Dev/clipboard_manager_macos/clipboard%20manager/Views/Components/OnboardingView.swift)
-  - [PermissionBanner.swift](file:///Users/tusharyadav/Dev/clipboard_manager_macos/clipboard%20manager/Views/Components/PermissionBanner.swift)
-- **Automated Direct-Paste**: Simulated command-v keystroke injection using Accessibility APIs for instant paste triggers upon clipboard item selection.
+| Action | Shortcut |
+|--------|----------|
+| Open overlay | `Cmd+Shift+V` |
+| Select item | `↑` / `↓` |
+| Paste + close | `Enter` |
+| Close overlay | `Esc` |
+| Pin item | Right-click → Pin |
+| Delete item | Right-click → Delete |
 
----
+Toggle persistent history, encryption, launch at login, and direct paste from **Settings**.
 
-## Directory Structure
+## Privacy
 
-```text
-├── clipboard manager/
-│   ├── Models/
-│   │   ├── ClipboardItem.swift           # Codable Sendable DTO
-│   │   └── SensitiveContentPolicy.swift  # Security scanning logic
-│   ├── Persistence/
-│   │   ├── DatabaseMigrator.swift        # SQLite scheme migrator
-│   │   ├── GRDBClipboardRepository.swift # SQLite CRUD transactions
-│   │   └── LegacyJSONImporter.swift      # JSON-to-SQLite migration
-│   ├── Services/
-│   │   ├── ClipboardService.swift        # Thread-safe background DB Actor
-│   │   ├── ClipboardMonitorService.swift # Async pasteboard polling loop
-│   │   ├── PasteService.swift            # Accessibility key-press simulator
-│   │   └── SecurityService.swift         # Encryption & key manager
-│   ├── ViewModels/
-│   │   └── ClipboardViewModel.swift      # MainActor UI bindings controller
-│   ├── Views/
-│   │   └── Components/                   # Modular SwiftUI subviews
-│   └── AppDelegate.swift                 # Application lifecycle coordinator
-├── create_dmg.sh                         # Automated build & packaging script
-├── CLAUDE.md                             # Local developer guidance reference
-└── README.md                             # Project documentation (this file)
-```
+Everything is local. No telemetry, no sync, no cloud. Your clipboard never leaves your machine.
 
----
+## Development
 
-## Setup & Development
-
-### Prerequisites
-- macOS 14.0+
-- Xcode 15.0+ (Swift 6.0 compatibility)
-- GitHub CLI (`gh`) (optional, for release deployment)
-
-### Build & Run
-To run the debug builds directly via Xcode:
-1. Open `clipboard manager.xcodeproj` in Xcode.
-2. Select the `clipboard manager` scheme.
-3. Press `Cmd + R` to build and run.
-
-To build manually in a terminal session:
 ```bash
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-xcodebuild -project "clipboard manager.xcodeproj" -scheme "clipboard manager" -configuration Debug build
+make build          # debug build
+make dmg            # release build + DMG
+make release        # build + DMG + tag + GitHub Release
 ```
 
----
+Requires Xcode 15+ and Swift 6. Open `clipboard manager.xcodeproj` and press `Cmd+R`.
 
-## Release & Distribution (DMG Packaging)
+## Troubleshooting
 
-For distributing outside of the Mac App Store (Sandbox disabled), the app is packaged as a `.dmg` installer. The build and packaging process has been fully automated:
-
-### 1. Generate DMG Installer
-Run the custom packaging script:
-```bash
-./create_dmg.sh
-```
-This script will:
-- Clean the `./build` directory and old DMGs.
-- Compile the app in **Release** configuration.
-- Bundle the app along with an `/Applications` symlink inside a temporary folder.
-- Execute native macOS `hdiutil` to package it into a compressed disk image: `Clipboard Manager.dmg`.
-
-*Note: Both build caches (`build/`) and output binaries (`*.dmg`, `*.app`) are excluded in `.gitignore` to prevent repository bloat.*
-
-### 2. Push Changes and Create GitHub Release
-To publish updates and distribute the new DMG via GitHub Releases cleanly using the GitHub CLI:
-
-1. **Verify your local branch status**:
-   ```bash
-   git status
-   ```
-
-2. **Commit configuration updates or documentation changes**:
-   ```bash
-   git add README.md create_dmg.sh
-   git commit -m "Add documentation and DMG packaging automation"
-   ```
-
-3. **Push commits to GitHub**:
-   ```bash
-   git push origin main
-   ```
-
-4. **Create a GitHub Release and Upload the DMG Asset**:
-   Rather than tracking the DMG binary in Git history, release it directly as a release asset:
-   ```bash
-   gh release create v1.0.0 "./Clipboard Manager.dmg" \
-     --title "v1.0.0" \
-     --notes "Production-ready release featuring Swift 6 concurrency, GRDB SQLite engine, and sensitive data protection."
-   ```
-
----
-
-## Troubleshooting & Debugging
-
-- **Gatekeeper Warning ("Apple could not verify...")**: Since local and GitHub-built releases are not signed and notarized with a paid Apple Developer Program account, macOS Gatekeeper will block them by default.
-  - To run the application:
-    1. Drag the application to your `/Applications` directory.
-    2. **Control-click (or right-click)** the app icon and choose **Open**, then click **Open** in the confirmation dialog. (This only needs to be done once).
-    3. Alternatively, you can strip the macOS quarantine flag using terminal:
-       ```bash
-       xattr -cr "/Applications/clipboard manager.app"
-       ```
-- **Accessibility Permissions**: If automated pasting does not work, make sure that the app is enabled under **System Settings > Privacy & Security > Accessibility**. If problems persist, toggle it off and back on.
-- **App Sandboxing**: Because this application simulates global keystrokes to automate pasting into active target programs, Sandboxing must remain disabled (`ENABLE_APP_SANDBOX = NO`).
+- **Gatekeeper warning**: Right-click the app in Applications → Open, or run `xattr -cr "/Applications/clipboard manager.app"`
+- **Direct paste doesn't work**: Enable the app in **System Settings > Privacy & Security > Accessibility**
+- **Hotkey not responding**: Check for conflicts with other apps in Settings
